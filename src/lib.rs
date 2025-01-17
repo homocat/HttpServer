@@ -9,9 +9,7 @@ use std::{
 
 use anyhow::{Error, Ok};
 use error::RequestError;
-use nom::bytes::{
-    complete::{tag, take_until},
-};
+use nom::bytes::complete::{tag, take_until};
 use request::{HttpMethod, HttpRequest, HttpRequestHeader, HttpVersion};
 
 const DELIMITER: &[u8] = b"\r\n\r\n";
@@ -54,24 +52,16 @@ fn parse_header(buf: &[u8]) -> anyhow::Result<HttpRequestHeader> {
         .map_err(|_| RequestError::ParseHeaderError)?;
     let host = String::from_utf8_lossy(host_bytes).to_string();
     let i = consume_newline(i)?;
-    let (i, name_bytes) = take_until::<_, _, nom::error::Error<&[u8]>>(": ")(i)
-        .map_err(|_| RequestError::ParseHeaderError)?;
-    let (i, _) = tag::<_, _, nom::error::Error<&[u8]>>(": ")(i)
-        .map_err(|_| RequestError::ParseHeaderError)?;
 
     let mut headers = HashMap::new();
-    let (mut i, version_bytes) = take_until::<_, _, nom::error::Error<&[u8]>>("\n")(buf)
-        .map_err(|_| RequestError::ParseHeaderError)?;
-
-    for line in i.split(|&byte| byte == b'\n') {
-        let (i, name_bytes) = take_until::<_, _, nom::error::Error<&[u8]>>(": ")(line)
-        .map_err(|_| RequestError::ParseHeaderError)?;
+    let header_lines = String::from_utf8_lossy(i);
+    for l in header_lines.lines() {
+        let mut splits = l.split(": ");
+        let name = splits.next().ok_or(RequestError::ParseHeaderError)?;
+        let value = splits.next().ok_or(RequestError::ParseHeaderError)?;
         let (i, _) = tag::<_, _, nom::error::Error<&[u8]>>(": ")(i)
-        .map_err(|_| RequestError::ParseHeaderError)?;
-        headers.insert(
-            String::from_utf8_lossy(name_bytes).to_string(),
-            String::from_utf8_lossy(i).to_string(),
-        );
+            .map_err(|_| RequestError::ParseHeaderError)?;
+        headers.insert(name.to_string(), value.to_string());
     }
 
     Ok(HttpRequestHeader {
